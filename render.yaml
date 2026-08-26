@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: barcode-benchmark
+    runtime: node
+    buildCommand: npm install && npm run build
+    startCommand: node serve.js
+    envVars:
+      - key: NODE_ENV
+        value: production

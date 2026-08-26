@@ -1,0 +1,297 @@
+<section class="page">
+  <h1 class="page-title">Image Benchmark</h1>
+
+  @if (lastError()) {
+    <div class="alert error">{{ lastError() }}</div>
+  }
+
+  <!-- Upload zone -->
+  <div class="upload-zone" [class.dragover]="dragOver()"
+       (dragover)="dragOver.set(true); $event.preventDefault()"
+       (dragleave)="dragOver.set(false)"
+       (drop)="onDrop($event)"
+       (click)="fileInput.click()">
+    <input #fileInput type="file" multiple accept="image/*" (change)="onFilesSelected($event)" />
+    <p>Drop images here or click to upload</p>
+    <p class="muted">PNG, JPG, WEBP — multiple files supported</p>
+  </div>
+
+  <!-- Engine selection -->
+  <div class="card">
+    <h2>Engines ({{ availableCount() }} browser-compatible)</h2>
+    <div class="controls-row">
+      <input class="search" type="search" placeholder="Search libraries…" [value]="engineSearch()"
+             (input)="engineSearch.set($any($event.target).value)" />
+      <button class="btn small" (click)="selectAllEngines()">Select all</button>
+      <button class="btn small" (click)="deselectAllEngines()">Deselect all</button>
+    </div>
+    <div class="chip-grid">
+      @for (e of filteredEngines(); track e.getName()) {
+        <label class="chip" [class.off]="!e.isAvailable()">
+          <input type="checkbox" [checked]="isEngineSelected(e.getName())" [disabled]="!e.isAvailable()"
+                 (change)="toggleEngine(e.getName())" />
+          {{ e.getName() }}
+          @if (!e.isAvailable()) {
+            <span class="muted">({{ e.getUnavailableReason() }})</span>
+          }
+        </label>
+      }
+    </div>
+  </div>
+
+  <!-- Preprocessing Tier Selection -->
+  <div class="card">
+    <h2>Preprocessing Tiers <span class="muted">({{ selectedVariantCount() }} variants selected)</span></h2>
+    <div class="tier-grid">
+      @for (tier of tiers; track tier) {
+        <div class="tier-card" [class.tier-active]="isTierSelected(tier)">
+          <label class="tier-header">
+            <input type="checkbox" [checked]="isTierSelected(tier)" (change)="toggleTier(tier)" />
+            <strong>{{ tier }}</strong>
+            <span class="muted">({{ tierVariantCount(tier) }} variants)</span>
+          </label>
+          <div class="tier-variants">
+            @for (v of getTierVariants(tier); track v) {
+              <span class="variant-tag" [class.variant-active]="isTierSelected(tier)">{{ variantLabels[v] }}</span>
+            }
+          </div>
+        </div>
+      }
+    </div>
+  </div>
+
+  <!-- Controls -->
+  <div class="card">
+    <h2>Images ({{ images().length }})</h2>
+    <div class="controls-row">
+      <button class="btn primary" (click)="runAll()" [disabled]="running() || !images().length">
+        {{ running() ? 'Running ' + progress().done + '/' + progress().total + '...' : 'Run All Engines' }}
+      </button>
+      <button class="btn" (click)="benchmark.clearOutcomes()">Clear results</button>
+    </div>
+    @if (running()) {
+      <div class="progress-bar">
+        <div class="progress-fill" [style.width.%]="progressPct()"></div>
+      </div>
+    }
+  </div>
+
+  <!-- Engine Summary -->
+  @if (engineSummaries().length) {
+    <div class="card">
+      <h2>Engine Summary (original variant)</h2>
+      <div class="scroll-x">
+        <table class="table">
+          <thead>
+            <tr><th>Engine</th><th>Detection Rate</th><th>Accuracy</th><th>Avg Latency</th></tr>
+          </thead>
+          <tbody>
+            @for (s of engineSummaries(); track s.engine) {
+              <tr>
+                <td>{{ s.engine }}</td>
+                <td>{{ fmtPct(s.detectionRate) }}</td>
+                <td>{{ fmtPct(s.accuracy) }}</td>
+                <td>{{ fmtMs(s.avgLatency) }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  }
+
+  @if (engineSummariesAllVariants().length) {
+    <div class="card">
+      <h2>Engine Summary (all selected tiers)</h2>
+      <div class="scroll-x">
+        <table class="table">
+          <thead>
+            <tr><th>Engine</th><th>Detection Rate</th><th>Accuracy</th><th>Avg Latency</th></tr>
+          </thead>
+          <tbody>
+            @for (s of engineSummariesAllVariants(); track s.engine) {
+              <tr>
+                <td>{{ s.engine }}</td>
+                <td>{{ fmtPct(s.detectionRate) }}</td>
+                <td>{{ fmtPct(s.accuracy) }}</td>
+                <td>{{ fmtMs(s.avgLatency) }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  }
+
+  <!-- Partial Hits: found by preprocessing but NOT by original -->
+  @if (partialHitImages().length > 0) {
+    <div class="card" style="border-color: var(--green);">
+      <h2>
+        <span style="color: var(--green);">&#x2705;</span>
+        Preprocessing Wins ({{ partialHitImages().length }})
+        <span class="muted">— missed in original, but found after preprocessing</span>
+      </h2>
+      <div class="missed-grid">
+        @for (img of partialHitImages(); track img.id) {
+          <div class="missed-card" style="border-color: var(--green);" (click)="selectedImage.set(img.id)">
+            <img [src]="img.objectUrl" class="missed-thumb" />
+            <div class="missed-info">
+              <span class="missed-filename">{{ img.filename }}</span>
+              <span class="muted">{{ img.width }}x{{ img.height }}</span>
+              @if (img.expectedValue) {
+                <span class="missed-expected" style="color: var(--green);">Expected: {{ img.expectedValue }}</span>
+              }
+              <span class="tag green">{{ img.category }}</span>
+            </div>
+          </div>
+        }
+      </div>
+    </div>
+  }
+
+  <!-- Missed Images Panel -->
+  @if (missedImages().length > 0) {
+    <div class="card missed-panel">
+      <h2>
+        <span class="missed-icon">&#x26A0;</span>
+        Missed Images ({{ missedImages().length }})
+        <span class="muted">— no engine found barcode in any variant</span>
+      </h2>
+
+      <!-- Retry engine selection -->
+      <div class="retry-engines">
+        <h3>Retry with different engines:</h3>
+        <div class="controls-row">
+          <input class="search" type="search" placeholder="Search engines..." [value]="retrySearch()"
+                 (input)="retrySearch.set($any($event.target).value)" />
+          <button class="btn small" (click)="selectAllRetryEngines()">Select all</button>
+          <button class="btn small" (click)="deselectAllRetryEngines()">Deselect all</button>
+          <button class="btn primary" (click)="runMissed()" [disabled]="retryRunning() || retrySelected().size === 0">
+            {{ retryRunning() ? 'Retrying...' : 'Retry Missed (' + retrySelected().size + ' engines)' }}
+          </button>
+        </div>
+        <div class="chip-grid">
+          @for (e of filteredRetryEngines(); track e.getName()) {
+            <label class="chip retry-chip">
+              <input type="checkbox" [checked]="isRetryEngineSelected(e.getName())"
+                     (change)="toggleRetryEngine(e.getName())" />
+              {{ e.getName() }}
+            </label>
+          }
+        </div>
+      </div>
+
+      <!-- Missed image thumbnails -->
+      <div class="missed-grid">
+        @for (img of missedImages(); track img.id) {
+          <div class="missed-card" (click)="selectedImage.set(img.id)">
+            <img [src]="img.objectUrl" class="missed-thumb" />
+            <div class="missed-info">
+              <span class="missed-filename">{{ img.filename }}</span>
+              <span class="muted">{{ img.width }}x{{ img.height }}</span>
+              @if (img.expectedValue) {
+                <span class="missed-expected">Expected: {{ img.expectedValue }}</span>
+              }
+              <span class="tag amber">{{ img.category }}</span>
+            </div>
+          </div>
+        }
+      </div>
+    </div>
+  }
+
+  <!-- Per-image list + detail -->
+  <div class="card">
+    <h2>Test Images</h2>
+    @if (!images().length) {
+      <p class="muted">Upload images above to begin testing.</p>
+    } @else {
+      <div class="scroll-x">
+        <table class="table">
+          <thead>
+            <tr><th>Image</th><th>Filename</th><th>Size</th><th>Expected Value</th><th>Format</th><th>Category</th><th>Angle</th><th>Distance</th><th></th></tr>
+          </thead>
+          <tbody>
+            @for (img of images(); track img.id) {
+              @if (editingId() === img.id) {
+                <tr>
+                  <td><img [src]="img.objectUrl" class="img-thumb" /></td>
+                  <td>{{ img.filename }}</td>
+                  <td>{{ img.width }}x{{ img.height }}</td>
+                  <td><input type="text" [value]="img.expectedValue" #ev placeholder="barcode value" /></td>
+                  <td><input type="text" [value]="img.expectedFormat" #ef placeholder="EAN-13" /></td>
+                  <td>
+                    <select [value]="img.category" #cat>
+                      @for (c of categories; track c) { <option [value]="c">{{ c }}</option> }
+                    </select>
+                  </td>
+                  <td><input type="number" [value]="img.angle ?? ''" #ang placeholder="0" min="0" max="360" /></td>
+                  <td><input type="number" [value]="img.distanceCm ?? ''" #dist placeholder="cm" min="0" /></td>
+                  <td>
+                    <button class="btn small primary" (click)="saveMeta(img.id, ev.value, ef.value, cat.value, ang.value, dist.value)">Save</button>
+                    <button class="btn small" (click)="cancelEditing()">Cancel</button>
+                  </td>
+                </tr>
+              } @else {
+                <tr (click)="selectedImage.set(img.id)" [class.highlight]="selectedImage() === img.id" style="cursor:pointer">
+                  <td><img [src]="img.objectUrl" class="img-thumb" /></td>
+                  <td>{{ img.filename }}</td>
+                  <td>{{ img.width }}x{{ img.height }}</td>
+                  <td class="mono">{{ img.expectedValue || '---' }}</td>
+                  <td>{{ img.expectedFormat || '---' }}</td>
+                  <td>{{ img.category }}</td>
+                  <td>{{ img.angle != null ? img.angle + '\u00B0' : '---' }}</td>
+                  <td>{{ img.distanceCm != null ? img.distanceCm + ' cm' : '---' }}</td>
+                  <td>
+                    <button class="btn small" (click)="startEditing(img.id); $event.stopPropagation()">Edit</button>
+                    <button class="btn small" style="color:var(--red)" (click)="removeImage(img.id); $event.stopPropagation()">Remove</button>
+                  </td>
+                </tr>
+              }
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </div>
+
+  <!-- Selected image detail -->
+  @if (selectedImageData(); as img) {
+    <div class="card">
+      <h2>{{ img.filename }}</h2>
+      <div class="controls-row">
+        <label>
+          Variant
+          <select [value]="selectedOutcomeVariant()" (change)="selectedOutcomeVariant.set($any($event.target).value)">
+            @for (v of variants; track v) {
+              <option [value]="v">{{ variantLabels[v] }}</option>
+            }
+          </select>
+        </label>
+      </div>
+
+      <div class="image-detail-layout">
+        <div class="img-preview">
+          <img [src]="img.objectUrl" />
+        </div>
+        <div class="img-results">
+          <p class="muted">Expected: <strong>{{ img.expectedValue || '---' }}</strong> ({{ img.expectedFormat || '---' }})</p>
+          <table class="table">
+            <thead><tr><th>Engine</th><th>Result</th><th>Value</th><th>Format</th><th>Time</th></tr></thead>
+            <tbody>
+              @for (o of selectedOutcomes(); track o.engine) {
+                <tr>
+                  <td>{{ o.engine }}</td>
+                  <td><span class="badge" [class]="badgeClass(o.classification)">{{ classLabel(o.classification) }}</span></td>
+                  <td class="mono">{{ o.values.length ? o.values[0] : '---' }}</td>
+                  <td>{{ o.formats.length ? o.formats[0] : '---' }}</td>
+                  <td>{{ fmtMs(o.latencyMs) }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  }
+</section>

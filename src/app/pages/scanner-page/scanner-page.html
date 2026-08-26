@@ -1,0 +1,221 @@
+<section class="page">
+  <h1 class="page-title">Live Camera Race Mode</h1>
+
+  @if (lastError()) {
+    <div class="alert error">{{ lastError() }}</div>
+  }
+
+  <!-- ── Camera controls ─────────────────────────────────────────── -->
+  <div class="card">
+    <h2>Camera</h2>
+    <div class="controls-row">
+      <label>
+        Camera
+        <select [value]="deviceId()" (change)="deviceId.set($any($event.target).value)" (focus)="refreshDevices()">
+          <option value="">Default (rear preferred)</option>
+          @for (d of devices(); track d.deviceId) {
+            <option [value]="d.deviceId">{{ d.label }}</option>
+          }
+        </select>
+      </label>
+      <label>
+        Resolution
+        <select [value]="resolution()" (change)="resolution.set($any($event.target).value)">
+          <option value="480p">480p</option>
+          <option value="720p">720p</option>
+          <option value="1080p">1080p</option>
+          <option value="4K">4K (if available)</option>
+        </select>
+      </label>
+      <label>
+        Scan FPS
+        <select [value]="fps()" (change)="fps.set(+$any($event.target).value)">
+          @for (f of fpsOptions; track f) {
+            <option [value]="f">{{ f }}</option>
+          }
+        </select>
+      </label>
+      <div class="btn-group">
+        <button class="btn primary" (click)="startCamera()" [disabled]="cameraRunning()">Start Camera</button>
+        <button class="btn" (click)="stopCamera()" [disabled]="!cameraRunning()">Stop</button>
+      </div>
+    </div>
+    <div class="controls-row">
+      <span class="muted" title="Detected by the browser after starting the camera">
+        @if (actualResolution(); as res) {
+          Actual: {{res.w}}×{{res.h}}
+        } @else {
+          Actual: N/A
+        }
+      </span>
+      @if (torchSupported()) {
+        <button class="btn small" (click)="toggleTorch()">{{ torchOn() ? '🔆 Torch off' : '🔅 Torch on' }}</button>
+      }
+      @if (zoomSupported()) {
+        <label>
+          Zoom
+          <input type="range" min="1" max="8" step="0.1" [value]="zoomLevel()" (input)="onZoom($event)" />
+        </label>
+      }
+      <button class="btn small" (click)="screenshot()" [disabled]="!cameraRunning()">📸 Screenshot</button>
+    </div>
+
+    <div class="video-wrap">
+      <video #video playsinline muted></video>
+      <canvas #frameCanvas class="hidden-canvas"></canvas>
+      @if (!cameraRunning()) {
+        <div class="video-placeholder">Camera off</div>
+      }
+    </div>
+  </div>
+
+  <!-- ── Ground truth / test setup ───────────────────────────────── -->
+  <div class="card">
+    <h2>Test Setup</h2>
+    <div class="controls-row">
+      <label>
+        Ground Truth
+        <input type="text" placeholder="e.g. 4006381333931" [value]="groundTruth()"
+               (input)="benchmark.groundTruth.set($any($event.target).value)" />
+      </label>
+      <label>
+        Test Type
+        <select [value]="testType()" (change)="setTestType($any($event.target).value)">
+          <option value="live">Live</option>
+          <option value="angle">Angle</option>
+          <option value="distance">Distance</option>
+          <option value="perspective">Perspective</option>
+          <option value="condition">Condition</option>
+        </select>
+      </label>
+      <label>
+        Condition
+        <input type="text" placeholder="normal" [value]="testCondition()"
+               (input)="benchmark.testCondition.set($any($event.target).value)" />
+      </label>
+      <label>
+        Angle °
+        <select [value]="angle() ?? ''" (change)="setAngle($any($event.target).value === '' ? null : +$any($event.target).value)">
+          <option value="">—</option>
+          @for (a of angles; track a) {
+            <option [value]="a">{{a}}°</option>
+          }
+        </select>
+      </label>
+      <label>
+        Distance cm
+        <input type="number" min="0" [value]="distanceCm() ?? ''"
+               (input)="benchmark.distanceCm.set($any($event.target).value === '' ? undefined : +$any($event.target).value)" />
+      </label>
+    </div>
+  </div>
+
+  <!-- ── Engine selection ────────────────────────────────────────── -->
+  <div class="card">
+    <h2>Engines ({{ availableCount() }} browser-compatible)</h2>
+    <div class="controls-row">
+      <input class="search" type="search" placeholder="Search libraries…" [value]="engineSearch()"
+             (input)="engineSearch.set($any($event.target).value)" />
+      <button class="btn small" (click)="selectAll()">Select all</button>
+      <button class="btn small" (click)="deselectAll()">Deselect all</button>
+      <button class="btn small" (click)="selectCompatibleOnly()">Compatible only</button>
+    </div>
+    <div class="chip-grid">
+      @for (e of filteredEngines(); track e.getName()) {
+        <label class="chip" [class.off]="!e.isAvailable()">
+          <input type="checkbox" [checked]="isSelected(e.getName())" [disabled]="!e.isAvailable()"
+                 (change)="toggleEngine(e.getName())" />
+          {{ e.getName() }}
+          @if (!e.isAvailable()) {
+            <span class="muted">({{ e.getUnavailableReason() }})</span>
+          }
+        </label>
+      }
+    </div>
+    <div class="controls-row">
+      <label class="inline"><input type="checkbox" [checked]="sequential()" (change)="sequential.set(!sequential())" /> Sequential mode</label>
+      <label class="inline"><input type="checkbox" [checked]="dedupe()" (change)="dedupe.set(!dedupe())" /> Suppress duplicate results</label>
+      <label class="inline"><input type="checkbox" [checked]="debugMode()" (change)="debugMode.set(!debugMode())" /> Debug mode</label>
+    </div>
+    <div class="btn-group">
+      <button class="btn primary" (click)="startScanning()" [disabled]="scanning() || !cameraRunning()">
+        ▶ Start Race
+      </button>
+      <button class="btn" (click)="stopScanning()" [disabled]="!scanning()">■ Stop Race</button>
+      <span class="muted">Session: {{ sessionId() || '—' }} · Frames: {{ totalFrames() }}</span>
+    </div>
+  </div>
+
+  <!-- ── Live results table ──────────────────────────────────────── -->
+  <div class="card">
+    <h2>Live Results</h2>
+    @if (orderedRaceRows().length) {
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Engine</th><th>Status</th><th>Result</th><th>Latency</th>
+            <th>Detection</th><th>Accuracy</th><th>Frames</th><th>Error</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (s of orderedRaceRows(); track s.engine) {
+            @if (benchmark.computeSummary(s.stats); as sum) {
+              <tr>
+                <td>{{ s.engine }}</td>
+                <td>{{ statusIcon(s.status) }}</td>
+                <td class="mono">{{ s.lastValue ?? '—' }}</td>
+                <td>{{ fmtMs(s.lastLatencyMs) }}</td>
+                <td>{{ fmtPct(sum.detectionRate) }}</td>
+                <td>{{ fmtPct(sum.accuracy) }}</td>
+                <td>{{ s.stats.totalFrames }}</td>
+                <td class="muted">{{ s.error ?? '' }}</td>
+              </tr>
+            }
+          }
+        </tbody>
+      </table>
+      @if (benchmark.firstCorrectEngine(); as winner) {
+        <p class="winner">⚡ First correct engine this frame: <strong>{{ winner }}</strong></p>
+      }
+    } @else {
+      <p class="muted">Start the camera, select engines and press “Start Race”.</p>
+    }
+    @if (debugMode()) {
+      <p class="muted">
+        Debug: frame capture canvas is active at native resolution; per-engine decode errors appear
+        in the Error column above.
+      </p>
+    }
+  </div>
+
+  <!-- ── Not runnable in browser (from note.md registry) ─────────── -->
+  <div class="card">
+    <h2>In the registry — not runnable here (no results fabricated)</h2>
+    <table class="table">
+      <thead><tr><th>Library</th><th>Status</th><th>Reason</th></tr></thead>
+      <tbody>
+        @for (entry of unavailableEngines(); track entry.getName()) {
+          <tr>
+            <td>{{ entry.getName() }}</td>
+            <td><span class="tag red">unavailable</span></td>
+            <td class="muted">{{ entry.getUnavailableReason() }}</td>
+          </tr>
+        }
+        @for (c of commercialSlots; track c.name) {
+          <tr>
+            <td>{{ c.name }}</td>
+            <td><span class="tag amber">license required</span></td>
+            <td class="muted">{{ c.reason }}</td>
+          </tr>
+        }
+        @for (r of registry.filter(e => !e.adapterImplemented && e.status !== 'available'); track r.name) {
+          <tr>
+            <td>{{ r.name }}</td>
+            <td><span class="tag grey">{{ r.status.replace('_',' ') }}</span></td>
+            <td class="muted">{{ r.reason }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+</section>

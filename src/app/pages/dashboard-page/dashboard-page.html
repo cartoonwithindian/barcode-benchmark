@@ -1,0 +1,145 @@
+<section class="page">
+  <h1 class="page-title">Results Dashboard</h1>
+
+  @if (error()) {
+    <div class="alert error">{{ error() }}</div>
+  }
+
+  @if (loading()) {
+    <p class="muted">Loading...</p>
+  } @else {
+    <!-- Controls -->
+    <div class="card">
+      <h2>Data ({{ records().length }} records)</h2>
+      <div class="controls-row">
+        <button class="btn primary" (click)="load()">Refresh</button>
+        <button class="btn" (click)="exportJson()">Export JSON</button>
+        <button class="btn" (click)="exportCsv()">Export CSV</button>
+        <label class="btn">
+          Import JSON
+          <input type="file" accept=".json" (change)="importJson($event)" style="display:none" />
+        </label>
+        <button class="btn" style="color:var(--red)" (click)="clearAll()">Clear All</button>
+      </div>
+    </div>
+
+    <!-- Overall rankings -->
+    @if (rankedEngines().length) {
+      <div class="card">
+        <h2>Overall Rankings</h2>
+        <div class="scroll-x">
+          <table class="table">
+            <thead>
+              <tr><th>#</th><th>Engine</th><th>Live Detection</th><th>Live Accuracy</th><th>Image Detection</th><th>Image Accuracy</th><th>Avg Latency (live)</th></tr>
+            </thead>
+            <tbody>
+              @for (r of rankedEngines(); track r.engine; let i = $index) {
+                @if (benchmark.computeSummary(r.liveStats); as live) {
+                  @if (imageSummary(r.imageStats); as img) {
+                    <tr>
+                      <td>{{ i + 1 }}</td>
+                      <td>{{ r.engine }}</td>
+                      <td>{{ fmtPct(live.detectionRate) }}</td>
+                      <td>{{ fmtPct(live.accuracy) }}</td>
+                      <td>{{ fmtPct(img.detectionRate) }}</td>
+                      <td>{{ fmtPct(img.accuracy) }}</td>
+                      <td>{{ fmtMs(live.avgLatency) }}</td>
+                    </tr>
+                  }
+                }
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+    } @else {
+      <div class="card">
+        <p class="muted">No benchmark data yet. Run the Live Race or Image Benchmark first.</p>
+      </div>
+    }
+
+    <!-- Angle matrix -->
+    @if (angleMatrix().rows.length) {
+      <div class="card">
+        <h2>Angle Test Matrix</h2>
+        <div class="scroll-x">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Engine</th>
+                @for (a of angleMatrix().angles; track a) {
+                  <th>{{ a }}&deg;</th>
+                }
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of angleMatrix().rows; track row.engine) {
+                <tr>
+                  <td>{{ row.engine }}</td>
+                  @for (cell of row.cells; track $index) {
+                    <td [class]="cell === '\u2713' ? 'correct-cell' : cell === '\u2717' ? 'incorrect-cell' : ''">{{ cell }}</td>
+                  }
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+    }
+
+    <!-- Per-engine stats -->
+    @if (liveRankings().length) {
+      <div class="card">
+        <h2>Live Camera Results</h2>
+        <div class="scroll-x">
+          <table class="table">
+            <thead><tr><th>Engine</th><th>Frames</th><th>Detections</th><th>Correct</th><th>Incorrect</th><th>Detection Rate</th><th>Accuracy</th><th>Avg Latency</th></tr></thead>
+            <tbody>
+              @for (r of liveRankings(); track r.engine) {
+                @if (benchmark.computeSummary(r.liveStats); as s) {
+                  <tr>
+                    <td>{{ r.engine }}</td>
+                    <td>{{ r.liveStats.totalFrames }}</td>
+                    <td>{{ r.liveStats.detections }}</td>
+                    <td>{{ r.liveStats.correct }}</td>
+                    <td>{{ r.liveStats.incorrect }}</td>
+                    <td>{{ fmtPct(s.detectionRate) }}</td>
+                    <td>{{ fmtPct(s.accuracy) }}</td>
+                    <td>{{ fmtMs(s.avgLatency) }}</td>
+                  </tr>
+                }
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+    }
+
+    @if (imageRankings().length) {
+      <div class="card">
+        <h2>Image Benchmark Results</h2>
+        <div class="scroll-x">
+          <table class="table">
+            <thead><tr><th>Engine</th><th>Frames</th><th>Detections</th><th>Correct</th><th>Incorrect</th><th>Detection Rate</th><th>Accuracy</th><th>Avg Latency</th></tr></thead>
+            <tbody>
+              @for (r of imageRankings(); track r.engine) {
+                @if (imageSummary(r.imageStats); as s) {
+                  <tr>
+                    <td>{{ r.engine }}</td>
+                    <td>{{ r.imageStats.totalFrames }}</td>
+                    <td>{{ r.imageStats.detections }}</td>
+                    <td>{{ r.imageStats.correct }}</td>
+                    <td>{{ r.imageStats.incorrect }}</td>
+                    <td>{{ fmtPct(s.detectionRate) }}</td>
+                    <td>{{ fmtPct(s.accuracy) }}</td>
+                    <td>{{ fmtMs(s.avgLatency) }}</td>
+                  </tr>
+                }
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+    }
+  }
+</section>
