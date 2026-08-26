@@ -1,11 +1,14 @@
 <header class="topbar">
   <span class="brand">Universal Barcode Benchmark</span>
-  <nav>
-    <a routerLink="/scanner" routerLinkActive="active">Live Race</a>
-    <a routerLink="/images" routerLinkActive="active">Image Benchmark</a>
-    <a routerLink="/dashboard" routerLinkActive="active">Dashboard</a>
+  <button class="menu-toggle" (click)="menuOpen = !menuOpen" [class.open]="menuOpen">
+    <span></span><span></span><span></span>
+  </button>
+  <nav [class.open]="menuOpen">
+    <a routerLink="/scanner" routerLinkActive="active" (click)="menuOpen = false">Live Race</a>
+    <a routerLink="/images" routerLinkActive="active" (click)="menuOpen = false">Image Benchmark</a>
+    <a routerLink="/dashboard" routerLinkActive="active" (click)="menuOpen = false">Dashboard</a>
   </nav>
 </header>
-<main>
+<main (click)="menuOpen = false">
   <router-outlet />
 </main>

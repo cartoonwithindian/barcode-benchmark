@@ -142,6 +142,9 @@
                 <span class="missed-expected" style="color: var(--green);">Expected: {{ img.expectedValue }}</span>
               }
               <span class="tag green">{{ img.category }}</span>
+              @for (h of hitsFor(img.id); track h.variant) {
+                <span class="tag green">&#x1F3AF; {{ variantLabels[h.variant] }} &middot; {{ h.engines.join(', ') }}</span>
+              }
             </div>
           </div>
         }
@@ -269,6 +272,18 @@
           </select>
         </label>
       </div>
+
+      @if (selectedImageHits().length) {
+        <p>
+          Detected at:
+          @for (h of selectedImageHits(); track h.variant) {
+            <button class="variant-tag variant-active" style="cursor:pointer"
+                    (click)="selectOutcomeVariant(h.variant)">
+              {{ variantLabels[h.variant] }} &middot; {{ h.engines.join(', ') }}
+            </button>
+          }
+        </p>
+      }
 
       <div class="image-detail-layout">
         <div class="img-preview">

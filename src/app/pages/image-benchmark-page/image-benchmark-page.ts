@@ -102,6 +102,33 @@ export class ImageBenchmarkPage {
     return id ? this.images().find((i) => i.id === id) ?? null : null;
   });
 
+  /** imageId -> list of variants where at least one engine detected, with the engines that hit. */
+  readonly hitsByImage = computed(() => {
+    const map = new Map<string, { variant: PreprocessVariant; engines: string[] }[]>();
+    for (const o of this.benchmark.outcomes()) {
+      if (o.classification === 'miss') continue;
+      let entries = map.get(o.imageId);
+      if (!entries) map.set(o.imageId, (entries = []));
+      let entry = entries.find((e) => e.variant === o.variant);
+      if (!entry) entries.push((entry = { variant: o.variant, engines: [] }));
+      if (!entry.engines.includes(o.engine)) entry.engines.push(o.engine);
+    }
+    return map;
+  });
+
+  hitsFor(imageId: string): { variant: PreprocessVariant; engines: string[] }[] {
+    return this.hitsByImage().get(imageId) ?? [];
+  }
+
+  selectOutcomeVariant(variant: PreprocessVariant): void {
+    this.selectedOutcomeVariant.set(variant);
+  }
+
+  readonly selectedImageHits = computed(() => {
+    const id = this.selectedImage();
+    return id ? this.hitsFor(id) : [];
+  });
+
   readonly selectedOutcomes = computed(() => {
     const id = this.selectedImage();
     return id ? this.benchmark.getOutcomesFor(id, this.selectedOutcomeVariant()) : [];
