@@ -118,9 +118,9 @@ export class VisionService {
     this.analysisGate = new Semaphore(config.pipeline.maxConcurrentAnalyses);
   }
 
-  /** Warms the barcode engines so the first real request is not slowed by WASM init. */
+  /** Warms the barcode engines and OCR pool so the first real request is not slowed by WASM init or worker spawn. */
   async warmUp(): Promise<void> {
-    await this.barcodePipeline.warmUp();
+    await Promise.all([this.barcodePipeline.warmUp(), this.ocrEngine.warmUp()]);
   }
 
   async close(): Promise<void> {
@@ -212,11 +212,17 @@ export class VisionService {
     // ── 4. Barcode ──────────────────────────────────────────────────────────
     setStage('barcode');
     const barcodeStart = process.hrtime.bigint();
+    // Reserve room for OCR before the barcode stage spends everything: on a
+    // throttled 0.1-CPU instance the barcode variants can consume their whole
+    // budget, and a `remainingMs() - 500` reservation leaves OCR seconds - not
+    // even enough for one Tesseract pass - so the stage reports `ocr_stage_failed`
+    // on readable labels. Reserve the configured OCR window when OCR is on.
+    const ocrReservation = runOcr ? Math.min(this.config.pipeline.ocr.timeoutMs, Math.max(0, overallBudgetMs - 10_000)) : 0;
     const barcodeBudget = Math.min(
       this.config.pipeline.barcode.maxMs,
-      // Never hand the barcode stage more than the request has left, and always
-      // leave 500 ms for OCR and response assembly.
-      Math.max(500, remainingMs() - 500),
+      // Never hand the barcode stage more than the request has left minus the
+      // OCR reservation and 500 ms for response assembly.
+      Math.max(500, remainingMs() - ocrReservation - 500),
       PLAN_MAX_MS[plan] * 2,
     );
     let barcodeResult;

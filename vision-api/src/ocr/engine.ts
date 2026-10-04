@@ -171,6 +171,20 @@ export class OcrEngine {
     });
   }
 
+  /**
+   * Creates the worker pool and loads the language model up front.
+   *
+   * Called at boot: worker spawn + traineddata load are the most expensive part
+   * of a cold OCR request (seconds on a throttled 0.1-CPU instance), and doing
+   * them inside the first request is how that request overruns its budget and
+   * reports `ocr_stage_failed` despite a perfectly readable label.
+   */
+  async warmUp(): Promise<void> {
+    if (this.closing) return;
+    this.ensureWorkers();
+    await Promise.all(this.ready);
+  }
+
   /** Returns `worker` to the pool or hands it to the longest-waiting caller. */
   private release(worker: TesseractWorker): void {
     for (;;) {
