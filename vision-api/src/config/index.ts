@@ -104,6 +104,17 @@ const envSchema = z.object({
    */
   OCR_MAX_DIMENSION: int(1400, 400, 4000),
   /**
+   * Smallest longest edge OCR will work at; smaller images are enlarged to it.
+   * `0` disables enlarging entirely.
+   *
+   * Small panels read badly at native size (a 400x392 nutrition table yields
+   * fragments), but Tesseract's cost is linear in pixels and on a throttled
+   * 0.1-CPU instance 400x392 -> 1400 px turned a 10 s OCR pass into one that
+   * blew the 25 s budget. Lower this on slow hardware: 1400 on a normal
+   * server, ~600 on Render's free tier, 0 to disable.
+   */
+  OCR_MIN_DIMENSION: int(1400, 0, 4000),
+  /**
    * Longest edge of the raster handed to the barcode engines and to the
    * preprocessing variants.
    *
@@ -173,6 +184,8 @@ export interface AppConfig {
       cache: boolean;
       /** Longest edge fed to Tesseract; see `OCR_MAX_DIMENSION`. */
       maxDimension: number;
+      /** Smallest edge fed to Tesseract; see `OCR_MIN_DIMENSION`. 0 = no enlarging. */
+      minDimension: number;
     };
     /** Simultaneous analyses allowed through the decode+pipeline gate. */
     maxConcurrentAnalyses: number;
@@ -236,6 +249,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
         workerLimit: e.OCR_WORKER_LIMIT,
         cache: e.OCR_CACHE,
         maxDimension: e.OCR_MAX_DIMENSION,
+        minDimension: e.OCR_MIN_DIMENSION,
       },
       maxConcurrentAnalyses: e.MAX_CONCURRENT_ANALYSES,
     },

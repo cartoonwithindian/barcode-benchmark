@@ -285,8 +285,8 @@ export class VisionService {
       // 400 px nutrition panel OCRs as gibberish at native size, and 1400 px is
       // the sweet spot measured in `src/imaging/resize.ts`.
       const ocrRaster = await resizeLongestEdge(decoded.raster, this.config.pipeline.ocr.maxDimension, {
-        allowUpscale: true,
-        minDimension: OCR_MIN_DIMENSION,
+        allowUpscale: this.config.pipeline.ocr.minDimension > 0,
+        minDimension: this.config.pipeline.ocr.minDimension || OCR_MIN_DIMENSION,
       }).catch((err) => {
         warnings.push('ocr_raster_cap_failed');
         this.log.warn({ request_id: ctx.requestId, reason: String(err) }, 'ocr raster cap failed; using full raster');
