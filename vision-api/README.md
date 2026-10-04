@@ -407,7 +407,7 @@ pipeline, and the text extraction modules.
 `tests/api.test.ts` covers the HTTP layer: `/health`, `/version`, `/metrics`,
 `POST /v1/analyze` against fixture images served by a local image server, auth, rate
 limiting, `x-request-id` echo, validation and error-envelope shape. The full suite
-(6 files / 130 tests) passes as of the current commit.
+(6 files / 132 tests) passes as of the current commit.
 
 ## Known divergences from the design brief
 
@@ -433,7 +433,7 @@ Free-tier env (the sizing was measured, not guessed — see `docs/OPERATIONS.md`
 `NODE_OPTIONS=--max-old-space-size=384`, `OCR_LANG_PATH=assets/tessdata-fast`,
 `OCR_MAX_VARIANTS=3`, `OCR_MIN_DIMENSION=0`, `OCR_TIMEOUT_MS=25000`,
 `REQUEST_TIMEOUT_MS=55000`, `CACHE_ENABLED=true` — peak RSS measured at
-~452 MB against the 512 MB cap, with 131/131 tests passing.
+~452 MB against the 512 MB cap, with 132/132 tests passing.
 
 Two OCR settings were chosen from live measurements, not intuition:
 
