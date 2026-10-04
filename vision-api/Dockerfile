@@ -34,11 +34,15 @@ RUN --mount=type=cache,target=/root/.npm \
 
 # --- Build stage: compile TypeScript to dist ---
 FROM base AS build
+# The base image sets NODE_ENV=production, which makes `npm ci` skip
+# devDependencies — and typescript lives there. Flip it for the install+build,
+# the runtime stage below switches back.
+ENV NODE_ENV=development
 # Install full deps (including dev) to compile with tsc/tsx deps available
 COPY package.json package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm \
   set -eux; \
-  npm ci --ignore-scripts=false
+  npm ci --include=dev --ignore-scripts=false
 # Copy source and build config
 COPY tsconfig.json tsconfig.build.json ./
 COPY src ./src
