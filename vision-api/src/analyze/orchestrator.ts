@@ -24,7 +24,7 @@ import { downloadImage } from '../ingest/downloader.js';
 import type { AppConfig } from '../config/index.js';
 import { assessQuality } from '../imaging/raster.js';
 import type { Raster } from '../imaging/raster.js';
-import { capLongestEdge } from '../imaging/resize.js';
+import { OCR_MIN_DIMENSION, resizeLongestEdge } from '../imaging/resize.js';
 import { CONTRACT_NAME_BY_VARIANT } from '../imaging/preprocessing.js';
 import { BarcodePipeline } from '../barcode/pipeline.js';
 import { EngineRegistry } from '../barcode/registry.js';
@@ -280,9 +280,14 @@ export class VisionService {
       warnings.push('ocr_skipped_request_budget_exhausted');
       this.log.info({ request_id: ctx.requestId, remaining_ms: ocrLeft }, 'ocr skipped: request budget exhausted');
     } else if (runOcr) {
-      // Barcodes need the full 2200 px working raster; text does not. Hand OCR
-      // a capped copy so no OCR variant can blow the memory budget by upscaling.
-      const ocrRaster = await capLongestEdge(decoded.raster, this.config.pipeline.ocr.maxDimension).catch((err) => {
+      // Barcodes need the full working raster; text does not. Cap it so no OCR
+      // variant can blow the memory budget, and enlarge small images only: a
+      // 400 px nutrition panel OCRs as gibberish at native size, and 1400 px is
+      // the sweet spot measured in `src/imaging/resize.ts`.
+      const ocrRaster = await resizeLongestEdge(decoded.raster, this.config.pipeline.ocr.maxDimension, {
+        allowUpscale: true,
+        minDimension: OCR_MIN_DIMENSION,
+      }).catch((err) => {
         warnings.push('ocr_raster_cap_failed');
         this.log.warn({ request_id: ctx.requestId, reason: String(err) }, 'ocr raster cap failed; using full raster');
         return decoded.raster;

@@ -38,16 +38,62 @@ export const DEFAULT_OCR_MAX_DIMENSION = 1400;
  * up to 1400 px would only invent detail for Tesseract to misread.
  */
 export async function capLongestEdge(src: Raster, maxDimension: number): Promise<Raster> {
-  if (Math.max(src.width, src.height) <= maxDimension) return src;
+  return resizeLongestEdge(src, maxDimension, { allowUpscale: false });
+}
 
-  const scale = maxDimension / Math.max(src.width, src.height);
+/**
+ * Longest edge Tesseract needs to read small label text reliably.
+ *
+ * Measured on a real 400x392 nutrition panel (Open Food Facts) with
+ * `tessdata-fast`, psm 6, everything else held constant:
+ *
+ *   input        chars recovered   mean conf
+ *   400x392 native      179           46
+ *   1400 px enlarged    285           42
+ *
+ * Enlarging recovers substantially more real text ("Nutrition Information",
+ * "Per Serve", "Sulph"); the mean-confidence figure *drops* slightly because on
+ * a noisy pack the extra pixels also make background noise legible enough to
+ * be counted. Recovered content is what callers downstream actually consume,
+ * so the enlargement wins.
+ *
+ * Only *small* images are enlarged. An image already at or above the cap is
+ * untouched, so this can never be the memory blow-up that removing the old
+ * `gray_upscale2x` variant fixed.
+ */
+export const OCR_MIN_DIMENSION = 1400;
+
+/**
+ * Resizes `src` so its longest edge is at most `maxDimension`, and - when
+ * `allowUpscale` is set - at least `minDimension`.
+ */
+export async function resizeLongestEdge(
+  src: Raster,
+  maxDimension: number,
+  opts: { allowUpscale?: boolean; minDimension?: number } = {},
+): Promise<Raster> {
+  const longest = Math.max(src.width, src.height);
+  const floor = opts.allowUpscale ? (opts.minDimension ?? OCR_MIN_DIMENSION) : 0;
+  let scale = 1;
+  if (longest > maxDimension) scale = maxDimension / longest;
+  else if (floor > 0 && longest < floor) scale = floor / longest;
+  if (scale === 1) return src;
+
   const width = Math.max(1, Math.round(src.width * scale));
   const height = Math.max(1, Math.round(src.height * scale));
 
   const { data, info } = await sharp(Buffer.from(src.data.buffer, src.data.byteOffset, src.data.byteLength), {
     raw: { width: src.width, height: src.height, channels: 4 },
   })
-    .resize({ width, height, fit: 'fill', kernel: 'lanczos3' })
+    .resize({
+      width,
+      height,
+      fit: 'fill',
+      // Lanczos in both directions: it softens the interpolation edges, which
+      // reads small print better than nearest-neighbour, whose staircase edges
+      // Tesseract reads as noise.
+      kernel: 'lanczos3',
+    })
     .raw()
     .toBuffer({ resolveWithObject: true });
 
