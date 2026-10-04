@@ -1,0 +1,114 @@
+{
+  "generated_by": "scripts/generate-fixtures.ts",
+  "fixtures": [
+    {
+      "file": "barcode-ean13.png",
+      "kind": "generated",
+      "expect": {
+        "barcode": "8901262260121",
+        "format": "EAN-13"
+      }
+    },
+    {
+      "file": "barcode-qr.png",
+      "kind": "generated",
+      "expect": {
+        "barcode": "https://sidsfarm.app.link/download-app",
+        "format": "QR Code"
+      }
+    },
+    {
+      "file": "barcode-ean13-degraded.jpg",
+      "kind": "generated",
+      "expect": {
+        "barcode": "8901262150989",
+        "format": "EAN-13"
+      },
+      "note": "low contrast + glare + rotation + deterministic noise"
+    },
+    {
+      "file": "barcode-ean13-hard.jpg",
+      "kind": "generated",
+      "expect": {
+        "barcode": "8901030770005",
+        "format": "EAN-13"
+      },
+      "note": "zero hits on the original variant; recovered by clahe/adaptive_threshold"
+    },
+    {
+      "file": "label-indian.png",
+      "kind": "generated",
+      "expect": {
+        "barcode": "8901262260121",
+        "format": "EAN-13",
+        "net_quantity": "500 ml",
+        "mrp": {
+          "amount": 34,
+          "currency": "INR"
+        },
+        "fssai_license": "10012051000123",
+        "veg_marker": "veg",
+        "ins_codes": [
+          "INS 322",
+          "INS 330",
+          "INS 471",
+          "INS 621"
+        ],
+        "allergen_candidates": [
+          "milk",
+          "soy",
+          "nuts"
+        ],
+        "nutrition_nutrients": [
+          "protein",
+          "total_fat",
+          "total_carbohydrate",
+          "sugars",
+          "sodium",
+          "calcium",
+          "vitamin_a"
+        ]
+      },
+      "note": "synthetic Indian label; text is in the SVG above"
+    },
+    {
+      "file": "blank-page.png",
+      "kind": "generated",
+      "expect": {
+        "barcode": null,
+        "ocr_text": null
+      },
+      "note": "blank page: honest \"not found\" case"
+    },
+    {
+      "file": "real-amul-pouch.jpeg",
+      "kind": "upstream-photo",
+      "expect": {
+        "barcode": "8901262260121",
+        "format": "EAN-13"
+      },
+      "note": "upstream photo; ZXing-C++ reads this in ~600 ms"
+    },
+    {
+      "file": "real-front-13.jpg",
+      "kind": "upstream-photo",
+      "expect": {
+        "barcode": "8906036670014",
+        "format": "EAN-13"
+      },
+      "note": "upstream photo; ZXing-C++ and ZBar agree"
+    },
+    {
+      "file": "real-qr-and-gtin-15.jpg",
+      "kind": "upstream-photo",
+      "expect": {
+        "barcode": "8905694508257",
+        "format": "EAN-13",
+        "also_expects": [
+          "QR Code"
+        ]
+      },
+      "note": "upstream photo; QR payload plus a retail GTIN"
+    }
+  ]
+}

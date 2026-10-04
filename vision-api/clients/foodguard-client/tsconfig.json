@@ -1,0 +1,26 @@
+{
+  // Self-contained: the service's root tsconfig.json includes only
+  // src/**, tests/** and scripts/**, and another agent owns that file, so this
+  // package brings its own project rather than editing it.
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "rootDir": ".",
+    "noEmit": true,
+    "strict": true,
+    // On purpose: an out-of-range index must produce `undefined` here rather
+    // than a confident wrong barcode. The helpers are written around it.
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "exactOptionalPropertyTypes": false,
+    "forceConsistentCasingInFileNames": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts", "examples/**/*.ts"]
+}

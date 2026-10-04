@@ -1,0 +1,132 @@
+# Render Blueprint for foodguard-vision-api
+#
+# Deploy from the barcode-benchmark monorepo (this folder is `vision-api/`):
+#   Dashboard > New + > Blueprint > cartoonwithindian/barcode-benchmark
+# or CLI:
+#   render services create --type web_service \
+#     --repo https://github.com/cartoonwithindian/barcode-benchmark \
+#     --root-directory vision-api --plan free --branch main \
+#     --health-check-path /health --name foodguard-vision-api
+#
+# Sizing (measured, see docs/OPERATIONS.md):
+# - Render free tier = 512 MB RAM / 0.1 CPU, spins down after ~15 min idle.
+# - WORKING_MAX_DIMENSION=1600 + MAX_CONCURRENT_ANALYSES=1 keep peak RSS at
+#   ~452 MB in the worst measured case (5401 px photo + OCR + 2 queued
+#   requests), leaving ~60 MB of headroom on the 512 MB cap.
+# - On paid plans you can raise WORKING_MAX_DIMENSION to 2200, allow 2-4
+#   concurrent analyses, and point OCR_LANG_PATH at assets/tessdata (full
+#   model) for slightly better OCR confidence.
+
+services:
+  - type: web
+    name: foodguard-vision-api
+    runtime: docker
+    repo: https://github.com/cartoonwithindian/barcode-benchmark
+    rootDir: vision-api
+    branch: main
+    plan: free
+    region: oregon
+    healthCheckPath: /health
+    autoDeploy: true
+    numRetries: 2
+
+    envVars:
+      # HTTP Server
+      - key: HOST
+        value: 0.0.0.0
+      - key: TRUST_PROXY
+        value: true # Render terminates TLS and proxies; client IPs come via X-Forwarded-For
+      - key: LOG_LEVEL
+        value: info
+      - key: LOG_PRETTY
+        value: false
+      # Free tier: cap V8 heap so the OOM killer never has to act first.
+      - key: NODE_OPTIONS
+        value: --max-old-space-size=384
+
+      # Security
+      - key: API_KEYS
+        sync: false # SECRET: comma-separated keys; empty disables auth
+      - key: ALLOW_HTTP
+        value: false
+      - key: HTTP_ALLOWED_HOSTS
+        value: ""
+      - key: PRIVATE_HOST_ALLOWLIST
+        value: ""
+      - key: ALLOWED_IMAGE_HOSTS
+        value: ""
+      - key: ALLOWED_URL_PORTS
+        value: ""
+      - key: CORS_ORIGINS
+        value: ""
+      - key: RATE_LIMIT_MAX
+        value: 30
+      - key: RATE_LIMIT_WINDOW
+        value: "1 minute"
+      - key: BODY_LIMIT_BYTES
+        value: 16384
+      # 0.1 CPU: a 90 s budget would outlast the platform's request window.
+      # A controlled 504 beats an OOM kill.
+      - key: REQUEST_TIMEOUT_MS
+        value: 25000
+
+      # Ingestion
+      - key: DOWNLOAD_TIMEOUT_MS
+        value: 12000
+      - key: DOWNLOAD_MAX_BYTES
+        value: 8388608
+      - key: MAX_REDIRECTS
+        value: 3
+      # Accept real phone photos (hard rejection thresholds, not downscale
+      # triggers); the working raster cap below bounds decode cost.
+      - key: MAX_IMAGE_DIMENSION
+        value: 6000
+      - key: MAX_IMAGE_PIXELS
+        value: 40000000
+      # THE key free-tier lever: 1600 px working raster (measured ~-100 MB peak
+      # vs 2200 px with no loss of barcode detection on the test corpus).
+      - key: WORKING_MAX_DIMENSION
+        value: 1600
+
+      # Pipeline
+      - key: BARCODE_MAX_VARIANTS
+        value: 6
+      - key: BARCODE_MAX_MS
+        value: 9000
+      - key: BARCODE_MIN_CONFIDENCE
+        value: 0.5
+      # Serialise analyses: each one can hold hundreds of MB of rasters.
+      - key: MAX_CONCURRENT_ANALYSES
+        value: 1
+
+      # OCR
+      - key: OCR_ENABLED
+        value: true
+      - key: OCR_MAX_VARIANTS
+        value: 2
+      - key: OCR_TIMEOUT_MS
+        value: 20000
+      # Fast model: 1.9 MB in-image, measurably equal confidence on labels,
+      # and much lower Tesseract memory than the full model.
+      - key: OCR_LANG_PATH
+        value: assets/tessdata-fast
+      - key: OCR_LANG
+        value: eng
+      - key: OCR_WORKER_LIMIT
+        value: 1
+      - key: OCR_CACHE
+        value: false
+
+      # Cache
+      - key: CACHE_ENABLED
+        value: true
+      - key: CACHE_MAX_ENTRIES
+        value: 24
+      - key: CACHE_TTL_SECONDS
+        value: 900
+
+      # Diagnostics
+      - key: EXPOSE_METRICS
+        value: true
+      - key: LOG_OCR_TEXT
+        value: false

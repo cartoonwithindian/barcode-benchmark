@@ -1,0 +1,49 @@
+{
+  "name": "foodguard-vision-api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "FoodGuard Vision API — barcode detection, OCR and ingredient extraction service for packaged food images (India).",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "main": "dist/server.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "fixtures": "tsx scripts/generate-fixtures.ts",
+    "check": "npm run typecheck && npm test"
+  },
+  "dependencies": {
+    "@ericblade/quagga2": "^1.12.1",
+    "@fastify/cors": "^11.0.1",
+    "@fastify/helmet": "^13.0.1",
+    "@fastify/rate-limit": "^10.2.2",
+    "@zxing/library": "^0.23.0",
+    "fastify": "^5.2.1",
+    "sharp": "^0.34.2",
+    "tesseract.js": "^6.0.1",
+    "undici": "^7.3.0",
+    "zbar.wasm": "^2.1.1",
+    "zxing-wasm": "^3.1.3",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.1",
+    "bwip-js": "^4.5.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.5"
+  },
+  "allowScripts": {
+    "sharp@0.35.5": true,
+    "sharp@0.34.5": true,
+    "esbuild@0.28.2": true,
+    "tesseract.js@6.0.1": true
+  }
+}
