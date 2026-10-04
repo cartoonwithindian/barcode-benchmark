@@ -57,6 +57,11 @@ export interface AnalyzeOptions {
   timeout_ms?: number;
   /** Set false to skip the OCR text normalisation pass. */
   normalize_text?: boolean;
+  /**
+   * Set false for text extraction only: the barcode stage is skipped and the
+   * full budget goes to OCR. Defaults to true.
+   */
+  detect_barcode?: boolean;
 }
 
 export interface AnalyzeRequest {
@@ -76,6 +81,7 @@ function optionsFingerprint(options: AnalyzeOptions): string {
   return JSON.stringify({
     plan: options.plan ?? 'standard',
     ocr: options.ocr ?? true,
+    detect_barcode: options.detect_barcode ?? true,
     max_variants: options.max_variants ?? null,
     normalize_text: options.normalize_text ?? true,
     schema: SCHEMA_VERSION,
@@ -154,6 +160,10 @@ export class VisionService {
     const options = request.options ?? {};
     const plan: PlanName = options.plan ?? 'standard';
     const runOcr = (options.ocr ?? true) && this.config.pipeline.ocr.enabled;
+    // `detect_barcode: false` turns this into a pure text-extraction service:
+    // no barcode engines run, so OCR gets the whole budget. Useful when an
+    // upstream AI model handles product identity from the returned text.
+    const runBarcode = options.detect_barcode ?? true;
     const maxVariants = Math.min(options.max_variants ?? this.config.pipeline.barcode.maxVariants, this.config.pipeline.barcode.maxVariants);
     if ((options.ocr ?? true) && !this.config.pipeline.ocr.enabled) {
       warnings.push('ocr_disabled_by_configuration');
@@ -226,22 +236,30 @@ export class VisionService {
       PLAN_MAX_MS[plan] * 2,
     );
     let barcodeResult;
-    try {
-      barcodeResult = await withTimeout(
-        this.barcodePipeline.run(decoded.raster, {
-          plan,
-          maxVariants,
-          maxMs: barcodeBudget,
-          minConfidence: this.config.pipeline.barcode.minConfidence,
-        }),
-        barcodeBudget + 2000,
-        () => new AppError(ErrorCode.ANALYSIS_FAILED, 'Barcode analysis exceeded its time budget.'),
-      );
-    } catch (err) {
-      globalMetrics.increment('analysis_failures_total');
-      warnings.push('barcode_stage_failed');
-      this.log.warn({ request_id: ctx.requestId, reason: String(err) }, 'barcode stage failed');
+    if (!runBarcode) {
+      // Text-only mode: the whole remaining budget goes to OCR. Reported as
+      // "not detected" rather than as a failure, because the stage was skipped
+      // on request - nothing was guessed and nothing was searched for.
+      warnings.push('barcode_skipped_by_request');
       barcodeResult = null;
+    } else {
+      try {
+        barcodeResult = await withTimeout(
+          this.barcodePipeline.run(decoded.raster, {
+            plan,
+            maxVariants,
+            maxMs: barcodeBudget,
+            minConfidence: this.config.pipeline.barcode.minConfidence,
+          }),
+          barcodeBudget + 2000,
+          () => new AppError(ErrorCode.ANALYSIS_FAILED, 'Barcode analysis exceeded its time budget.'),
+        );
+      } catch (err) {
+        globalMetrics.increment('analysis_failures_total');
+        warnings.push('barcode_stage_failed');
+        this.log.warn({ request_id: ctx.requestId, reason: String(err) }, 'barcode stage failed');
+        barcodeResult = null;
+      }
     }
     timings.barcode_ms = sinceMs(barcodeStart);
 

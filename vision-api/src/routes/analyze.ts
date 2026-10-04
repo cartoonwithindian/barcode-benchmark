@@ -29,6 +29,8 @@ const analyzeBodySchema = z
         max_variants: z.number().int().min(1).max(40).optional(),
         timeout_ms: z.number().int().min(1000).max(300_000).optional(),
         normalize_text: z.boolean().optional(),
+        // false = text extraction only; the barcode stage is skipped.
+        detect_barcode: z.boolean().optional(),
       })
       .strict()
       .optional(),

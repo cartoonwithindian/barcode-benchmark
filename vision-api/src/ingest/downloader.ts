@@ -32,9 +32,22 @@ const ALLOWED_CONTENT_TYPES = new Set([
   'application/octet-stream', // tolerated: the byte sniff is authoritative
 ]);
 
-/** Formats the pipeline can actually decode (sharp/libvips). */
-export const SUPPORTED_FORMATS = ['jpeg', 'png', 'webp', 'gif', 'avif', 'tiff', 'bmp', 'heif'] as const;
+/**
+ * Formats the pipeline can actually decode (sharp/libvips in this image).
+ *
+ * Measured against the bundled libvips 8.17: JPEG, PNG, WEBP, GIF, TIFF and
+ * AVIF all round-trip. BMP is recognised by the sniff but the decoder rejects
+ * it ("unsupported image format"), so it is reported as an explicit,
+ * actionable error instead of a confusing decode failure. JPEG2000 and SVG
+ * are not supported by this build at all.
+ */
+export const SUPPORTED_FORMATS = ['jpeg', 'png', 'webp', 'gif', 'avif', 'tiff', 'heif'] as const;
 export type SupportedFormat = (typeof SUPPORTED_FORMATS)[number];
+
+/** Recognised by the magic-byte sniff but not decodable by this build. */
+const RECOGNISED_UNSUPPORTED: Record<string, string> = {
+  bmp: 'BMP is not supported by the image decoder. Convert it to JPEG or PNG first.',
+};
 
 /** Magic byte sniffing — the content type header is never trusted on its own. */
 export function sniffImageFormat(buffer: Buffer): SupportedFormat | null {
@@ -50,8 +63,8 @@ export function sniffImageFormat(buffer: Buffer): SupportedFormat | null {
   // GIF: "GIF87a"/"GIF89a"
   const gif = buffer.subarray(0, 6).toString('ascii');
   if (gif === 'GIF87a' || gif === 'GIF89a') return 'gif';
-  // BMP: "BM"
-  if (buffer.subarray(0, 2).toString('ascii') === 'BM') return 'bmp';
+  // BMP: "BM" — recognised, but this libvips build cannot decode it.
+  if (buffer.subarray(0, 2).toString('ascii') === 'BM') return 'bmp' as SupportedFormat;
   // AVIF / HEIF: ftyp box
   if (buffer.subarray(4, 8).toString('ascii') === 'ftyp') {
     const brand = buffer.subarray(8, 12).toString('ascii');
@@ -231,6 +244,11 @@ export async function downloadImage(
     if (!format) {
       globalMetrics.increment('invalid_image_total');
       throw new AppError(ErrorCode.INVALID_IMAGE, 'The downloaded file is not a readable image.');
+    }
+    const unsupportedNote = RECOGNISED_UNSUPPORTED[format];
+    if (unsupportedNote) {
+      globalMetrics.increment('invalid_image_total');
+      throw new AppError(ErrorCode.INVALID_IMAGE, unsupportedNote, { details: { detected_format: format } });
     }
 
     const elapsedMs = sinceMs(startedAt);

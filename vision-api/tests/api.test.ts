@@ -191,5 +191,37 @@ describe('API tests', () => {
         }
       });
     }, 60000);
+
+    it('text-only mode skips the barcode stage and still returns OCR text', async () => {
+      const port = new URL(imgServer.origin).port;
+      const env = { ...BASE_ENV, ALLOWED_URL_PORTS: port };
+      await withEnv(env, async () => {
+        const config = loadConfig();
+        const app = await buildServer({ config, logger: silentLogger() });
+        try {
+          const res = await app.inject({
+            method: 'POST',
+            url: '/v1/analyze',
+            headers: { 'content-type': 'application/json', 'x-api-key': TEST_API_KEY },
+            payload: { image_url: imgServer.url('label-indian.png'), options: { detect_barcode: false } },
+          });
+          expect(res.statusCode).toBe(200);
+          const body = res.json();
+          // The stage was skipped on request, so no barcode was searched for and
+          // none is reported - not a failure, not a guess.
+          expect(body.barcode.detected).toBe(false);
+          expect(body.barcode.primary).toBeNull();
+          expect(body.diagnostics.barcode_engines_attempted).toEqual([]);
+          expect(body.warnings).toContain('barcode_skipped_by_request');
+          // The point of the mode: the text is still extracted.
+          expect(body.ocr.detected).toBe(true);
+          expect(body.ocr.raw_text.length).toBeGreaterThan(0);
+          expect(body.ocr.normalized_text.length).toBeGreaterThan(0);
+        } finally {
+          await app.close();
+          await app.visionService.close();
+        }
+      });
+    }, 60000);
   });
 });

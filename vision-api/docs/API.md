@@ -154,6 +154,7 @@ the original design brief; see the README's "Known divergences".
 | `max_variants` | integer | `BARCODE_MAX_VARIANTS` (6) | 1–40 | Cap on **barcode** preprocessing variants. Clamped down to `BARCODE_MAX_VARIANTS`. Has no effect on OCR — that uses `OCR_MAX_VARIANTS`. |
 | `timeout_ms` | integer | — | 1000–300000 | Per-request wall-clock budget. Clamped down to `max(BARCODE_MAX_MS, OCR_TIMEOUT_MS)` — 45000 ms with defaults — and when that happens the response carries an `x-timeout-clamped-ms` header with the effective value (`src/server.ts:214`, `src/routes/analyze.ts:66-70,79`). Only the barcode budget derives from it. |
 | `normalize_text` | boolean | `true` | — | Set `false` to skip the OCR correction pass. `normalized_text` then equals `raw_text`, `corrections` is empty and `normalization_confidence` is `1`. |
+| `detect_barcode` | boolean | `true` | — | Set `false` for **text extraction only**: the barcode stage is skipped, OCR receives the whole request budget, and the response carries the warning `barcode_skipped_by_request` with `barcode.detected=false`, `barcode.primary=null` and `diagnostics.barcode_engines_attempted=[]`. Nothing is searched for, so nothing is reported. |
 
 ### Response body
 
@@ -181,7 +182,7 @@ Top level (`src/analyze/schema.ts:165-193`):
 | Field | Type | Notes |
 |-------|------|-------|
 | `width`, `height` | integer | Dimensions after EXIF orientation and downscaling. |
-| `format` | string | Sniffed format: `jpeg`, `png`, `webp`, `gif`, `avif`, `tiff`, `bmp`, `heif`. |
+| `format` | string | Sniffed format: `jpeg`, `png`, `webp`, `gif`, `avif`, `tiff`, `heif`. BMP is recognised by the sniff but the bundled libvips cannot decode it, so a BMP upload is rejected up front with `INVALID_IMAGE` and a message telling you to convert it. JPEG2000 and SVG are not supported by this build. |
 | `source_width`, `source_height` | integer | Dimensions as stored in the file. |
 | `orientation_applied` | boolean | True when EXIF orientation was not 1. |
 | `downscaled` | boolean | True when the source exceeded the working resolution, `min(MAX_IMAGE_DIMENSION, WORKING_MAX_DIMENSION)` — 2200 px by default (`src/ingest/decode.ts:99-100`). |
@@ -1174,7 +1175,8 @@ no Prometheus text format — this is a bespoke JSON snapshot
         "ocr": { "type": "boolean", "default": true },
         "max_variants": { "type": "integer", "min": 1, "max": 40 },
         "timeout_ms": { "type": "integer", "min": 1000, "max": 300000 },
-        "normalize_text": { "type": "boolean", "default": true }
+        "normalize_text": { "type": "boolean", "default": true },
+        "detect_barcode": { "type": "boolean", "default": true }
       }
     }
   }
