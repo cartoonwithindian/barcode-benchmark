@@ -105,8 +105,16 @@ services:
       # OCR
       - key: OCR_ENABLED
         value: true
+      # 3, not fewer: measured on a noisy 400 px panel, the first two candidate
+      # variants both returned *no* text and only the third read anything.
       - key: OCR_MAX_VARIANTS
         value: 3
+      # 0 = do not enlarge small images. Enlarging a 400 px panel to 1400 px
+      # recovers more characters (179 -> 285 locally) but multiplies Tesseract
+      # work ~12x, and on 0.1 CPU that pushed the stage from 11 s to over the
+      # budget. Raise to 1400 on a paid plan.
+      - key: OCR_MIN_DIMENSION
+        value: 0
       - key: OCR_TIMEOUT_MS
         value: 25000
       # Fast model: 1.9 MB in-image, measurably equal confidence on labels,

@@ -431,9 +431,27 @@ Deployed 2026-10-04: `https://foodguard-vision-api.onrender.com` (service id
 Free-tier env (the sizing was measured, not guessed — see `docs/OPERATIONS.md`):
 `WORKING_MAX_DIMENSION=1600`, `MAX_CONCURRENT_ANALYSES=1`,
 `NODE_OPTIONS=--max-old-space-size=384`, `OCR_LANG_PATH=assets/tessdata-fast`,
-`OCR_MAX_VARIANTS=3`, `OCR_TIMEOUT_MS=25000`, `REQUEST_TIMEOUT_MS=55000`,
-`CACHE_ENABLED=true` — peak RSS measured at ~452 MB against the 512 MB cap,
-with 130/130 tests passing.
+`OCR_MAX_VARIANTS=3`, `OCR_MIN_DIMENSION=0`, `OCR_TIMEOUT_MS=25000`,
+`REQUEST_TIMEOUT_MS=55000`, `CACHE_ENABLED=true` — peak RSS measured at
+~452 MB against the 512 MB cap, with 131/131 tests passing.
+
+Two OCR settings were chosen from live measurements, not intuition:
+
+- **`OCR_MIN_DIMENSION=0`** (no enlarging of small images). Enlarging a 400 px
+  panel to 1400 px recovers more characters (179 → 285 locally) but costs ~12x
+  the Tesseract work; on 0.1 CPU that turned an 11 s OCR stage into one that
+  blew its budget and returned no text at all. Set it to `1400` on a paid plan.
+- **`OCR_MAX_VARIANTS=3`**, not fewer. On the same noisy panel the first two
+  candidate variants each returned *nothing*; only the third read any text, so
+  lowering this is not a latency win, it is a quality cliff.
+
+**Text-only mode** (skip the barcode stage and spend the whole budget on OCR):
+
+```bash
+curl -s -X POST https://foodguard-vision-api.onrender.com/v1/analyze \
+  -H "content-type: application/json" -H "x-api-key: $VISION_KEY" \
+  -d '{"image_url":"https://example.com/pack.jpg","options":{"detect_barcode":false}}' | jq -r .ocr.raw_text
+```
 
 Measured on the live instance (standard plan, cached results return in <1 s):
 
@@ -441,6 +459,12 @@ Measured on the live instance (standard plan, cached results return in <1 s):
 |---------|---------|-----|-------------|-------|
 | `real-amul-pouch.jpeg` | `8901262260121` EAN-13 conf 0.611 | 562 chars, conf 69 | not on this photo | 37 s cold / 0.8 s cached |
 | `label-indian.png` | detected (QR) | 868 chars, conf 93 | **0.883** — Milk, Sugar, INS 621 (Monosodium Glutamate), Refined Palm Oil, Milk Solids, INS 322, INS 330, INS 471, Citric Acid | 13.6 s |
+| Open Food Facts 400x392 nutrition crop (text-only) | skipped on request | 164 chars, conf 67 | not present | 13.3 s |
+
+Supported image formats (measured against the bundled libvips 8.17): JPEG,
+PNG, WEBP, GIF, TIFF, AVIF/HEIF. BMP is rejected up front with an actionable
+message because this libvips build cannot decode it; JPEG2000 and SVG are not
+supported.
 
 Free-tier caveats: the instance spins down after ~15 min idle (~1 min spin-up on
 the next request, billed to your 750 h/month), and expect roughly 25-40 s per
