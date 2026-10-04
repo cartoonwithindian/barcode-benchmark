@@ -192,6 +192,39 @@ describe('API tests', () => {
       });
     }, 60000);
 
+    it('returns 429 (not 500) once the rate limit is exhausted', async () => {
+      const port = new URL(imgServer.origin).port;
+      const env = { ...BASE_ENV, ALLOWED_URL_PORTS: port, RATE_LIMIT_MAX: '3' };
+      await withEnv(env, async () => {
+        const config = loadConfig();
+        const app = await buildServer({ config, logger: silentLogger() });
+        try {
+          const request = () =>
+            app.inject({
+              method: 'POST',
+              url: '/v1/analyze',
+              headers: { 'content-type': 'application/json', 'x-api-key': TEST_API_KEY },
+              payload: {},
+            });
+          for (let i = 0; i < 3; i++) await request();
+          const limited = await request();
+          expect(limited.statusCode).toBe(429);
+          const body = limited.json();
+          expect(body.success).toBe(false);
+          expect(body.error.code).toBe(ErrorCode.RATE_LIMITED);
+          expect(body.error.retry_after_seconds).toBeGreaterThan(0);
+          expect(body.request_id).toBeTruthy();
+          // The health endpoint must stay reachable while a client is limited,
+          // or Render's own probe would report the service down.
+          const health = await app.inject({ method: 'GET', url: '/health' });
+          expect(health.statusCode).toBe(200);
+        } finally {
+          await app.close();
+          await app.visionService.close();
+        }
+      });
+    }, 60000);
+
     it('text-only mode skips the barcode stage and still returns OCR text', async () => {
       const port = new URL(imgServer.origin).port;
       const env = { ...BASE_ENV, ALLOWED_URL_PORTS: port };

@@ -102,18 +102,14 @@ export async function buildServer(options: BuildServerOptions): Promise<VisionSe
     },
     errorResponseBuilder: (request, context) => {
       globalMetrics.increment('rate_limited_total');
-      // Same envelope as every other error. A client should never have to
-      // special-case 429 to find the request id or the failing stage.
-      return {
-        success: false,
-        request_id: String(request.id),
-        error: {
-          code: ErrorCode.RATE_LIMITED,
-          message: 'Too many requests. Retry after the indicated window.',
-          retry_after_seconds: Math.ceil(context.ttl / 1000),
-        },
-        meta: { failure_stage: 'rate_limited' },
-      };
+      // The plugin THROWS whatever this returns, so it has to be a real AppError:
+      // returning a plain envelope object handed the error handler something
+      // with no statusCode, which it correctly classified as an unexpected 500
+      // instead of a 429. The handler renders the identical envelope shape.
+      return new AppError(ErrorCode.RATE_LIMITED, 'Too many requests. Retry after the indicated window.', {
+        retryAfterSeconds: Math.ceil(context.ttl / 1000),
+        details: { limit: context.max, ttl_ms: context.ttl },
+      });
     },
   });
 
