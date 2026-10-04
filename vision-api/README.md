@@ -406,9 +406,8 @@ pipeline, and the text extraction modules.
 
 `tests/api.test.ts` covers the HTTP layer: `/health`, `/version`, `/metrics`,
 `POST /v1/analyze` against fixture images served by a local image server, auth, rate
-limiting, `x-request-id` echo, validation and error-envelope shape. **It does not
-currently compile** — see the last row of the table below — so treat it as a work in
-progress rather than a passing gate.
+limiting, `x-request-id` echo, validation and error-envelope shape. The full suite
+(6 files / 130 tests) passes as of the current commit.
 
 ## Known divergences from the design brief
 
@@ -421,8 +420,33 @@ Recorded here so an integrator is not surprised. Each is traceable to source.
 | `GET /v1/status`, `GET /v1/analyze/schema` | Both exist and both require an API key, because the auth hook exempts only `/`, `/health`, `/version`, `/metrics` (`src/server.ts:127`). |
 | Request timeout | `REQUEST_TIMEOUT_MS` is parsed, validated and logged but never enforced — no code path produces a 504 for it (`src/config/index.ts:62-63`, `src/index.ts:40`). Per-stage budgets do the real work. |
 | Engine confidence | `confidence_source: "engine"` is a valid schema value (`src/analyze/schema.ts:43`) but no wired engine exposes a per-result score, so it is never observed in practice (`src/barcode/fusion.ts:9-12`). |
-| HTTP-layer test does not compile | `tests/api.test.ts` closes its outer `describe` at line 58, so the `imgServer` declared at line 11 is out of scope for the eight `describe` blocks that follow. `npx tsc -p tsconfig.json --noEmit` reports `TS2304: Cannot find name 'imgServer'` at lines 93, 103, 139, 149, 180, 189, 212 and 222. `src/**` itself typechecks clean. |
 | `options.timeout_ms` is clamped, and `GET /v1/analyze/schema` does not say so | The route lowers it to `max(BARCODE_MAX_MS, OCR_TIMEOUT_MS)` — 45000 ms with defaults (`src/routes/analyze.ts:66-70`, `src/server.ts:214`). The clamp is reported in an `x-timeout-clamped-ms` response header, not in `warnings`, while the schema endpoint still advertises `max: 300000` (`src/routes/analyze.ts:104`). |
+| ~30 s connection cut in front of the service | Observed on the live free-tier deployment: a 37 s analysis completed server-side (HTTP 200 in the service log, result cached) while the client's connection was severed at ~30 s with a 502. Callers must tolerate this: use the `clients/foodguard-client` retry policy, which treats a severed connection on `/v1/analyze` as retryable, or keep the deadline under 30 s. |
+
+## Live deployment (Render free tier)
+
+Deployed 2026-10-04: `https://foodguard-vision-api.onrender.com` (service id
+`srv-db13pjm0tbcc739cdsng`, Docker runtime, `vision-api/` as root directory).
+
+Free-tier env (the sizing was measured, not guessed — see `docs/OPERATIONS.md`):
+`WORKING_MAX_DIMENSION=1600`, `MAX_CONCURRENT_ANALYSES=1`,
+`NODE_OPTIONS=--max-old-space-size=384`, `OCR_LANG_PATH=assets/tessdata-fast`,
+`OCR_MAX_VARIANTS=3`, `OCR_TIMEOUT_MS=25000`, `REQUEST_TIMEOUT_MS=55000`,
+`CACHE_ENABLED=true` — peak RSS measured at ~452 MB against the 512 MB cap,
+with 130/130 tests passing.
+
+Measured on the live instance (standard plan, cached results return in <1 s):
+
+| Fixture | Barcode | OCR | Ingredients | Total |
+|---------|---------|-----|-------------|-------|
+| `real-amul-pouch.jpeg` | `8901262260121` EAN-13 conf 0.611 | 562 chars, conf 69 | not on this photo | 37 s cold / 0.8 s cached |
+| `label-indian.png` | detected (QR) | 868 chars, conf 93 | **0.883** — Milk, Sugar, INS 621 (Monosodium Glutamate), Refined Palm Oil, Milk Solids, INS 322, INS 330, INS 471, Citric Acid | 13.6 s |
+
+Free-tier caveats: the instance spins down after ~15 min idle (~1 min spin-up on
+the next request, billed to your 750 h/month), and expect roughly 25-40 s per
+cold analysis on the 0.1-CPU allocation. Connection idle time beyond ~30 s may
+be cut by a proxy in front of the service even though the analysis still
+completes and lands in the cache — see the divergences table.
 
 ## Licence
 

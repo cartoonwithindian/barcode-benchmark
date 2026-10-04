@@ -65,10 +65,13 @@ services:
         value: "1 minute"
       - key: BODY_LIMIT_BYTES
         value: 16384
-      # 0.1 CPU: a 90 s budget would outlast the platform's request window.
-      # A controlled 504 beats an OOM kill.
+      # 0.1 CPU: a full analysis (barcode variants + 2-3 OCR passes) measures
+      # 25-40 s. Render's own proxy cuts idle connections at ~30 s, so callers
+      # running longer requests should keep the connection alive (client-side
+      # keep-alive heartbeat) or poll a cached request id; a 55 s server budget
+      # still lets the run finish and land in the cache.
       - key: REQUEST_TIMEOUT_MS
-        value: 25000
+        value: 55000
 
       # Ingestion
       - key: DOWNLOAD_TIMEOUT_MS
@@ -103,9 +106,9 @@ services:
       - key: OCR_ENABLED
         value: true
       - key: OCR_MAX_VARIANTS
-        value: 2
+        value: 3
       - key: OCR_TIMEOUT_MS
-        value: 20000
+        value: 25000
       # Fast model: 1.9 MB in-image, measurably equal confidence on labels,
       # and much lower Tesseract memory than the full model.
       - key: OCR_LANG_PATH
