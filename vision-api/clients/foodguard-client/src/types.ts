@@ -38,6 +38,8 @@ export interface AnalyzeOptions {
   timeout_ms?: number;
   /** Run the OCR text-normalisation pass. Server default `true`. */
   normalize_text?: boolean;
+  /** Run the barcode stage. Server default `true`; `false` means text extraction only. */
+  detect_barcode?: boolean;
 }
 
 /**

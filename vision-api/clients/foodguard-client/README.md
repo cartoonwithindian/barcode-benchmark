@@ -11,6 +11,29 @@ and the Indian retail fields come out.
   the service is missing something, this client says so rather than filling the
   gap — see [Contract notes](#contract-notes).
 
+## CLI
+
+`fgv` wraps the same client in a command line tool - zero dependencies, no build step:
+
+```bash
+export FOODGUARD_VISION_API_URL="https://foodguard-vision-api.onrender.com"
+export FOODGUARD_VISION_API_KEY="fgv_..."
+
+# from the repo root (tsx is a devDependency of the service)
+npx tsx clients/foodguard-client/src/cli.ts "<image-url>"
+
+# text only - skip the barcode stage and spend the budget on OCR
+npx tsx clients/foodguard-client/src/cli.ts "<image-url>" --text-only
+
+# raw response JSON, or a barcode-focused fast pass
+npx tsx clients/foodguard-client/src/cli.ts "<image-url>" --json
+npx tsx clients/foodguard-client/src/cli.ts "<image-url>" --plan fast --timeout 120000
+```
+
+Flags: `--text-only`, `--json`, `--plan fast|standard|deep`, `--key <key>`,
+`--url <origin>`, `--timeout <ms>`. Exit code is `0` on success, `1` on an API
+error (the service's error code and message are printed), `2` on bad usage.
+
 ## Layout
 
 ```
@@ -19,6 +42,7 @@ clients/foodguard-client/
   src/errors.ts    VisionApiError & friends, plus the retryable/non-retryable sets
   src/http.ts      transport: auth header, deadline, one bounded retry
   src/client.ts    VisionApiClient — analyze, health, version, metrics
+  src/cli.ts       `fgv` command line entry point
   src/helpers.ts   summarizeForLookup, extractSignals, describeDetection
   src/index.ts     public exports
   examples/analyze.ts   runnable end-to-end example
